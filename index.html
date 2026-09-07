@@ -861,11 +861,15 @@ function showCustomerQuotationPreview(){
  document.getElementById('customerPreviewModal')?.classList.add('show');
 }
 function printCustomerQuotation(){
- const x=window._savedCustomerQuotation;if(!x)return; const html=document.getElementById('customerPreview')?.innerHTML||'';
- const w=window.open('','_blank','width=850,height=700'); if(!w){toast('ظ…ط±ظˆط±ع¯ط± ط§ط¬ط§ط²ظ‡ ط¨ط§ط² ط´ط¯ظ† ظ¾ظ†ط¬ط±ظ‡ ع†ط§ظ¾ ط±ط§ ظ†ط¯ط§ط¯.');return;}
- w.document.write(`<html lang="fa" dir="rtl"><head><meta charset="utf-8"><title>${x.payload?.code||'ظ¾غŒط´â€Œظپط§ع©طھظˆط±'}</title><style>body{font-family:Tahoma,Arial;padding:35px;color:#111;line-height:2} .portal-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.customer-quotation-card{border:2px solid #111827;border-radius:16px;padding:16px;background:#fff}
-.purchase-card{border:2px solid #111827;border-radius:16px;padding:16px;background:#fff;margin-top:14px}.purchase-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:12px}.purchase-grid>div{background:#f8fafc;border-radius:12px;padding:12px}.purchase-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.route-badge{display:inline-block;padding:6px 10px;border-radius:10px;background:#f3f4f6;margin:3px}.route-badge strong{display:block}</style></head><body><h1>WorkshopPro â€” ظ¾غŒط´â€Œظپط§ع©طھظˆط±</h1>${html}<script>window.onload=function(){window.print()}<\/script>
-<script id="WORKSHOPPRO_V84_CUSTOMER_REQUEST_HUB">
+ const x=window._savedCustomerQuotation;if(!x)return;
+ const html=document.getElementById('customerPreview')?.innerHTML||'';
+ const w=window.open('','_blank','width=850,height=700');
+ if(!w){toast('ظ…ط±ظˆط±ع¯ط± ط§ط¬ط§ط²ظ‡ ط¨ط§ط² ط´ط¯ظ† ظ¾ظ†ط¬ط±ظ‡ ع†ط§ظ¾ ط±ط§ ظ†ط¯ط§ط¯.');return;}
+ w.document.write('<html lang="fa" dir="rtl"><head><meta charset="utf-8"><title>ظ¾غŒط´â€Œظپط§ع©طھظˆط±</title><style>body{font-family:Tahoma,Arial;padding:35px;color:#111;line-height:2}</style></head><body><h1>WorkshopPro â€” ظ¾غŒط´â€Œظپط§ع©طھظˆط±</h1>'+html+'</body></html>');
+ w.document.close();
+ w.onload=()=>w.print();
+}
+</script><script id="WORKSHOPPRO_V84_CUSTOMER_REQUEST_HUB">
 (function(){
   const SUPA_URL = (window.SUPABASE_URL || window.supabaseUrl || "https://tbsxccpkpklmvstyqwfk.supabase.co").replace(/\/$/,"");
   const SUPA_KEY = window.SUPABASE_ANON_KEY || window.supabaseAnonKey || "";
