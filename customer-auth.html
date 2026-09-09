@@ -5,43 +5,51 @@
 body{font-family:Tahoma,Arial,sans-serif;background:#f4f6f8;margin:0;color:#17202a;display:flex;min-height:100vh;align-items:center;justify-content:center}
 .card{background:#fff;border-radius:14px;padding:24px;max-width:380px;width:92%;box-shadow:0 2px 10px #0001}
 h1{font-size:20px;margin:0 0 4px}p.sub{color:#667085;font-size:13px;margin:0 0 18px}
+.tabs{display:flex;border:1px solid #e4e7eb;border-radius:9px;overflow:hidden;margin-bottom:18px}
+.tabs button{flex:1;padding:10px;border:0;background:#f4f6f8;cursor:pointer;font-size:14px;color:#667085}
+.tabs button.active{background:#1769aa;color:#fff}
 label{display:block;margin:14px 0 6px;font-weight:bold;font-size:14px}
-input{width:100%;box-sizing:border-box;padding:12px;border:1px solid #ccd2d9;border-radius:9px;font-size:16px;direction:ltr;text-align:left}
-button{width:100%;border:0;border-radius:9px;padding:13px;font-size:15px;cursor:pointer;background:#1769aa;color:#fff;margin-top:16px}
-button:disabled{opacity:.5}
+input{width:100%;box-sizing:border-box;padding:12px;border:1px solid #ccd2d9;border-radius:9px;font-size:16px}
+input[type=email],input[type=password]{direction:ltr;text-align:left}
+button.primary{width:100%;border:0;border-radius:9px;padding:13px;font-size:15px;cursor:pointer;background:#1769aa;color:#fff;margin-top:16px}
+button.primary:disabled{opacity:.5}
 .muted{color:#667085;font-size:13px;margin-top:10px;text-align:center}
 .err{color:#b42318;font-size:13px;margin-top:8px}
 .ok{color:#087443;font-size:13px;margin-top:8px}
 .hidden{display:none}
-a.resend{color:#1769aa;text-decoration:none;cursor:pointer}
 </style></head><body>
 
 <div class="card">
-  <h1>ورود / ثبت‌نام مشتری</h1>
-  <p class="sub">ورود از طریق شماره موبایل و کد تایید پیامکی</p>
+  <h1>پنل مشتری</h1>
+  <p class="sub">ورود یا ثبت‌نام با ایمیل و رمز عبور</p>
 
-  <div id="step-phone">
-    <label>شماره موبایل</label>
-    <input id="phone" type="tel" placeholder="09121234567" maxlength="11">
-    <button id="btnSendOtp">ارسال کد تایید</button>
-    <div id="phoneMsg"></div>
+  <div class="tabs">
+    <button id="tabLogin" class="active">ورود</button>
+    <button id="tabSignup">ثبت‌نام</button>
   </div>
 
-  <div id="step-otp" class="hidden">
-    <label>کد تایید ارسال‌شده به پیامک</label>
-    <input id="otp" type="text" inputmode="numeric" placeholder="------" maxlength="6">
-    <button id="btnVerify">تایید و ورود</button>
-    <div class="muted"><span id="resendWrap">کدی دریافت نکردید؟ <a class="resend" id="btnResend">ارسال مجدد</a></span></div>
-    <div id="otpMsg"></div>
+  <div id="panelLogin">
+    <label>ایمیل</label>
+    <input id="loginEmail" type="email" placeholder="you@example.com">
+    <label>رمز عبور</label>
+    <input id="loginPassword" type="password">
+    <button class="primary" id="btnLogin">ورود</button>
+    <div id="loginMsg"></div>
   </div>
 
-  <div id="step-profile" class="hidden">
+  <div id="panelSignup" class="hidden">
     <label>نام شرکت / کسب‌وکار</label>
     <input id="companyName" type="text" placeholder="مثلاً شرکت تاج قطعه آسیا">
     <label>نام مسئول فنی (اختیاری)</label>
     <input id="contactName" type="text">
-    <button id="btnSaveProfile">تکمیل ثبت‌نام و ورود به پنل</button>
-    <div id="profileMsg"></div>
+    <label>شماره موبایل</label>
+    <input id="mobile" type="tel" placeholder="09121234567">
+    <label>ایمیل</label>
+    <input id="signupEmail" type="email" placeholder="you@example.com">
+    <label>رمز عبور (حداقل ۶ کاراکتر)</label>
+    <input id="signupPassword" type="password">
+    <button class="primary" id="btnSignup">ثبت‌نام و ورود به پنل</button>
+    <div id="signupMsg"></div>
   </div>
 </div>
 
@@ -51,106 +59,73 @@ const SUPABASE_URL = "https://tbsxccpkpklmvstyqwfk.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRic3hjY3BrcGtsbXZzdHlxd2ZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyNjI0NDUsImV4cCI6MjEwMzgzODQ0NX0.PfpAn9oGekQRkEP8JJ3T1MnkeHF-rBNBQyNCMpLIeoo";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-let currentPhone = "";
+const tabLogin = document.getElementById("tabLogin");
+const tabSignup = document.getElementById("tabSignup");
+const panelLogin = document.getElementById("panelLogin");
+const panelSignup = document.getElementById("panelSignup");
 
-function toE164(input){
-  let p = input.trim().replace(/[^0-9]/g,"");
-  if(p.startsWith("0")) p = "98" + p.slice(1);
-  if(!p.startsWith("98")) p = "98" + p;
-  return "+" + p;
-}
+tabLogin.onclick = () => {
+  tabLogin.classList.add("active"); tabSignup.classList.remove("active");
+  panelLogin.classList.remove("hidden"); panelSignup.classList.add("hidden");
+};
+tabSignup.onclick = () => {
+  tabSignup.classList.add("active"); tabLogin.classList.remove("active");
+  panelSignup.classList.remove("hidden"); panelLogin.classList.add("hidden");
+};
 
-const stepPhone = document.getElementById("step-phone");
-const stepOtp = document.getElementById("step-otp");
-const stepProfile = document.getElementById("step-profile");
-
-document.getElementById("btnSendOtp").onclick = async () => {
-  const msg = document.getElementById("phoneMsg");
-  const raw = document.getElementById("phone").value;
-  if(!/^0?9\d{9}$/.test(raw.replace(/\s/g,""))){
-    msg.innerHTML = '<div class="err">شماره موبایل معتبر نیست.</div>';
+document.getElementById("btnLogin").onclick = async () => {
+  const msg = document.getElementById("loginMsg");
+  const email = document.getElementById("loginEmail").value.trim();
+  const password = document.getElementById("loginPassword").value;
+  if(!email || !password){
+    msg.innerHTML = '<div class="err">ایمیل و رمز عبور را کامل وارد کنید.</div>';
     return;
   }
-  currentPhone = toE164(raw);
-  msg.innerHTML = "";
-  const btn = document.getElementById("btnSendOtp");
+  const btn = document.getElementById("btnLogin");
   btn.disabled = true;
-  const { error } = await sb.auth.signInWithOtp({ phone: currentPhone });
+  const { error } = await sb.auth.signInWithPassword({ email, password });
   btn.disabled = false;
   if(error){
     msg.innerHTML = '<div class="err">'+error.message+'</div>';
     return;
   }
-  stepPhone.classList.add("hidden");
-  stepOtp.classList.remove("hidden");
+  window.location.href = "customer-dashboard.html";
 };
 
-document.getElementById("btnResend").onclick = async () => {
-  const msg = document.getElementById("otpMsg");
-  const { error } = await sb.auth.signInWithOtp({ phone: currentPhone });
-  msg.innerHTML = error ? '<div class="err">'+error.message+'</div>' : '<div class="ok">کد دوباره ارسال شد.</div>';
-};
-
-document.getElementById("btnVerify").onclick = async () => {
-  const msg = document.getElementById("otpMsg");
-  const otp = document.getElementById("otp").value.trim();
-  if(otp.length < 4){
-    msg.innerHTML = '<div class="err">کد تایید را کامل وارد کنید.</div>';
-    return;
-  }
-  const btn = document.getElementById("btnVerify");
-  btn.disabled = true;
-  const { data, error } = await sb.auth.verifyOtp({ phone: currentPhone, token: otp, type: "sms" });
-  btn.disabled = false;
-  if(error){
-    msg.innerHTML = '<div class="err">'+error.message+'</div>';
-    return;
-  }
-  await afterLogin(data.user.id);
-};
-
-async function afterLogin(userId){
-  // بررسی اینکه پروفایل مشتری قبلاً ساخته شده یا نه
-  const { data: profile, error } = await sb
-    .from("user_profiles")
-    .select("id, full_name, customer_id")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if(error){
-    document.getElementById("otpMsg").innerHTML = '<div class="err">خطا در بررسی پروفایل: '+error.message+'</div>';
-    return;
-  }
-
-  if(profile && profile.customer_id){
-    // کاربر قبلاً ثبت‌نام کامل کرده -> برو به پنل مشتری
-    window.location.href = "customer-dashboard.html";
-    return;
-  }
-
-  // کاربر جدید -> فرم تکمیل مشخصات شرکت رو نشون بده
-  stepOtp.classList.add("hidden");
-  stepProfile.classList.remove("hidden");
-}
-
-document.getElementById("btnSaveProfile").onclick = async () => {
-  const msg = document.getElementById("profileMsg");
+document.getElementById("btnSignup").onclick = async () => {
+  const msg = document.getElementById("signupMsg");
   const companyName = document.getElementById("companyName").value.trim();
   const contactName = document.getElementById("contactName").value.trim();
-  if(!companyName){
-    msg.innerHTML = '<div class="err">نام شرکت را وارد کنید.</div>';
+  const mobile = document.getElementById("mobile").value.trim();
+  const email = document.getElementById("signupEmail").value.trim();
+  const password = document.getElementById("signupPassword").value;
+
+  if(!companyName || !email || password.length < 6){
+    msg.innerHTML = '<div class="err">نام شرکت، ایمیل و رمز عبور (حداقل ۶ کاراکتر) الزامی است.</div>';
     return;
   }
-  const btn = document.getElementById("btnSaveProfile");
+
+  const btn = document.getElementById("btnSignup");
   btn.disabled = true;
 
-  const { data: { user } } = await sb.auth.getUser();
+  const { data: signUpData, error: signUpErr } = await sb.auth.signUp({ email, password });
+  if(signUpErr){
+    btn.disabled = false;
+    msg.innerHTML = '<div class="err">'+signUpErr.message+'</div>';
+    return;
+  }
 
-  // ساخت رکورد مشتری
+  const user = signUpData.user;
+  if(!user){
+    btn.disabled = false;
+    msg.innerHTML = '<div class="ok">لینک تایید به ایمیل شما ارسال شد. بعد از تایید ایمیل وارد شوید.</div>';
+    return;
+  }
+
   const custCode = "CUS-" + Date.now().toString().slice(-8);
   const { data: customer, error: custErr } = await sb
     .from("customers")
-    .insert({ code: custCode, name: companyName, mobile: currentPhone, source: "self_signup" })
+    .insert({ code: custCode, name: companyName, mobile: mobile || null, source: "self_signup" })
     .select("id")
     .single();
 
@@ -160,7 +135,6 @@ document.getElementById("btnSaveProfile").onclick = async () => {
     return;
   }
 
-  // ساخت/به‌روزرسانی پروفایل کاربر و اتصال به مشتری
   const { error: profErr } = await sb
     .from("user_profiles")
     .upsert({
