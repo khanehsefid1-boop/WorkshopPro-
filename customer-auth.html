@@ -53,10 +53,20 @@ button.primary:disabled{opacity:.5}
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/supabase-js/2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 const SUPABASE_URL = "https://tbsxccpkpklmvstyqwfk.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRic3hjY3BrcGtsbXZzdHlxd2ZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyNjI0NDUsImV4cCI6MjEwMzgzODQ0NX0.PfpAn9oGekQRkEP8JJ3T1MnkeHF-rBNBQyNCMpLIeoo";
+
+if(typeof supabase === "undefined"){
+  document.querySelector(".card").innerHTML =
+    '<div class="err" style="font-size:15px;line-height:1.8">'
+    + 'کتابخانه‌ی اتصال به سرور لود نشد (مشکل شبکه یا فیلترینگ).<br>'
+    + 'لطفاً اینترنت/فیلترشکن را بررسی کنید و صفحه را دوباره باز کنید.'
+    + '</div>';
+  throw new Error("supabase-js failed to load from CDN");
+}
+
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const tabLogin = document.getElementById("tabLogin");
