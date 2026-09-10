@@ -1,0 +1,329 @@
+<!doctype html><html lang="fa" dir="rtl"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>پنل مشتری — WorkshopPro</title>
+<style>
+body{font-family:Tahoma,Arial,sans-serif;background:#f4f6f8;margin:0;color:#17202a}
+.top{background:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 4px #0001;position:sticky;top:0;z-index:5}
+.top h1{font-size:17px;margin:0}
+.top button{border:0;background:#f4f6f8;color:#b42318;padding:8px 14px;border-radius:8px;font-size:13px;cursor:pointer}
+.tabs{display:flex;overflow-x:auto;background:#fff;border-bottom:1px solid #e4e7eb;position:sticky;top:53px;z-index:4}
+.tabs button{flex:0 0 auto;padding:12px 14px;border:0;background:none;font-size:13px;color:#667085;white-space:nowrap;border-bottom:2px solid transparent;cursor:pointer}
+.tabs button.active{color:#1769aa;border-color:#1769aa;font-weight:bold}
+.wrap{padding:14px;max-width:520px;margin:0 auto}
+.page{display:none}
+.page.active{display:block}
+.card{background:#fff;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 1px 4px #0001}
+.card h3{margin:0 0 8px;font-size:15px}
+.card .meta{font-size:12px;color:#667085;margin-bottom:6px}
+.badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;margin-inline-start:6px}
+.badge.new,.badge.draft{background:#eef2ff;color:#3538cd}
+.badge.approved,.badge.paid,.badge.delivered,.badge.closed{background:#ecfdf3;color:#087443}
+.badge.sent,.badge.waiting_customer,.badge.partial{background:#fff4e5;color:#b54708}
+.badge.cancelled,.badge.customer_rejected{background:#fef3f2;color:#b42318}
+label{display:block;margin:12px 0 6px;font-weight:bold;font-size:13px}
+select,textarea,input{width:100%;box-sizing:border-box;padding:11px;border:1px solid #ccd2d9;border-radius:9px;font-size:15px;font-family:inherit}
+textarea{min-height:90px;resize:vertical}
+.type-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+.type-grid button{padding:14px 8px;border:1px solid #ccd2d9;border-radius:10px;background:#fff;font-size:13px;cursor:pointer;text-align:center}
+.type-grid button.sel{border-color:#1769aa;background:#eef6fc;color:#1769aa;font-weight:bold}
+button.primary{width:100%;border:0;border-radius:9px;padding:13px;font-size:15px;cursor:pointer;background:#1769aa;color:#fff;margin-top:16px}
+button.primary:disabled{opacity:.5}
+button.approve{background:#087443;color:#fff;border:0;border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer;margin-top:8px}
+.err{color:#b42318;font-size:13px;margin-top:8px}
+.ok{color:#087443;font-size:13px;margin-top:8px}
+.empty{color:#98a2b3;font-size:13px;text-align:center;padding:30px 0}
+.row{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px dashed #eee}
+.row:last-child{border-bottom:0}
+</style></head><body>
+
+<div class="top">
+  <h1>پنل مشتری</h1>
+  <button id="btnLogout">خروج</button>
+</div>
+
+<div class="tabs">
+  <button class="tab active" data-page="pNew">درخواست جدید</button>
+  <button class="tab" data-page="pRequests">درخواست‌های من</button>
+  <button class="tab" data-page="pQuotes">پیش‌فاکتورها</button>
+  <button class="tab" data-page="pJobs">کارها</button>
+  <button class="tab" data-page="pInvoices">فاکتور و پرداخت</button>
+</div>
+
+<div class="wrap">
+
+  <!-- ثبت درخواست جدید -->
+  <div id="pNew" class="page active">
+    <div class="card">
+      <h3>نوع درخواست را انتخاب کنید</h3>
+      <div class="type-grid" id="typeGrid">
+        <button data-v="sell_equipment">فروش دستگاه</button>
+        <button data-v="buy_equipment">خرید دستگاه</button>
+        <button data-v="buy_part">خرید قطعه</button>
+        <button data-v="buy_service">درخواست خدمات</button>
+      </div>
+      <label>شرح درخواست</label>
+      <textarea id="reqDesc" placeholder="توضیح کامل درخواست، مشخصات دستگاه یا قطعه مورد نیاز..."></textarea>
+      <button class="primary" id="btnSubmitReq">ثبت درخواست</button>
+      <div id="reqMsg"></div>
+    </div>
+  </div>
+
+  <!-- درخواست های من -->
+  <div id="pRequests" class="page">
+    <div id="requestsList"><div class="empty">در حال بارگذاری...</div></div>
+  </div>
+
+  <!-- پیش فاکتورها -->
+  <div id="pQuotes" class="page">
+    <div id="quotesList"><div class="empty">در حال بارگذاری...</div></div>
+  </div>
+
+  <!-- کارها -->
+  <div id="pJobs" class="page">
+    <div id="jobsList"><div class="empty">در حال بارگذاری...</div></div>
+  </div>
+
+  <!-- فاکتور و پرداخت -->
+  <div id="pInvoices" class="page">
+    <div id="invoicesList"><div class="empty">در حال بارگذاری...</div></div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+const SUPABASE_URL = "https://tbsxccpkpklmvstyqwfk.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRic3hjY3BrcGtsbXZzdHlxd2ZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyNjI0NDUsImV4cCI6MjEwMzgzODQ0NX0.PfpAn9oGekQRkEP8JJ3T1MnkeHF-rBNBQyNCMpLIeoo";
+
+if(typeof supabase === "undefined"){
+  document.body.innerHTML = '<div class="wrap"><div class="card err">کتابخانه‌ی اتصال به سرور لود نشد. اینترنت/فیلترشکن را بررسی کنید.</div></div>';
+  throw new Error("supabase-js failed to load");
+}
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const TYPE_LABELS = {
+  sell_equipment: "فروش دستگاه",
+  buy_equipment: "خرید دستگاه",
+  buy_part: "خرید قطعه",
+  buy_service: "درخواست خدمات"
+};
+
+const STATUS_LABELS = {
+  new:"جدید", received:"دریافت شد", diagnosis:"در حال بررسی", waiting_quote:"در انتظار پیش‌فاکتور",
+  waiting_customer:"در انتظار تایید شما", approved:"تایید شده", repairing:"در حال تعمیر",
+  waiting_part:"در انتظار قطعه", sourcing:"در حال تأمین", waiting_purchase:"در انتظار خرید",
+  final_test:"تست نهایی", ready_delivery:"آماده تحویل", delivered:"تحویل شده", closed:"بسته شده",
+  cancelled:"لغو شده", customer_rejected:"رد شده توسط شما", customer_hold:"معلق", draft:"پیش‌نویس",
+  sent:"ارسال شده", unpaid:"پرداخت‌نشده", partial:"پرداخت جزئی", paid:"پرداخت شده", refunded:"بازگشت‌داده‌شده"
+};
+
+function badge(status){
+  const label = STATUS_LABELS[status] || status || "-";
+  return '<span class="badge '+(status||'')+'">'+label+'</span>';
+}
+function toman(n){
+  if(n===null || n===undefined) return "-";
+  return Number(n).toLocaleString('fa-IR') + " ریال";
+}
+function fmtDate(d){
+  if(!d) return "-";
+  try{ return new Date(d).toLocaleDateString('fa-IR'); }catch(e){ return d; }
+}
+
+let currentUser = null;
+let customerId = null;
+let selectedType = null;
+
+async function init(){
+  const { data: { user } } = await sb.auth.getUser();
+  if(!user){
+    window.location.href = "customer-auth.html";
+    return;
+  }
+  currentUser = user;
+
+  const { data: profile, error: profErr } = await sb
+    .from("user_profiles").select("customer_id").eq("id", user.id).maybeSingle();
+
+  if(profErr || !profile || !profile.customer_id){
+    document.querySelector(".wrap").innerHTML = '<div class="card err">پروفایل مشتری یافت نشد. لطفاً دوباره وارد شوید.</div>';
+    return;
+  }
+  customerId = profile.customer_id;
+
+  loadRequests();
+  loadQuotes();
+  loadJobs();
+  loadInvoices();
+}
+
+// تب‌ها
+document.querySelectorAll(".tab").forEach(btn=>{
+  btn.onclick = () => {
+    document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
+    document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById(btn.dataset.page).classList.add("active");
+  };
+});
+
+// انتخاب نوع درخواست
+document.querySelectorAll("#typeGrid button").forEach(btn=>{
+  btn.onclick = () => {
+    document.querySelectorAll("#typeGrid button").forEach(b=>b.classList.remove("sel"));
+    btn.classList.add("sel");
+    selectedType = btn.dataset.v;
+  };
+});
+
+// ثبت درخواست جدید
+document.getElementById("btnSubmitReq").onclick = async () => {
+  const msg = document.getElementById("reqMsg");
+  const desc = document.getElementById("reqDesc").value.trim();
+  if(!selectedType){
+    msg.innerHTML = '<div class="err">نوع درخواست را انتخاب کنید.</div>';
+    return;
+  }
+  if(!desc){
+    msg.innerHTML = '<div class="err">شرح درخواست را وارد کنید.</div>';
+    return;
+  }
+  const btn = document.getElementById("btnSubmitReq");
+  btn.disabled = true;
+
+  const code = "SR-" + Date.now().toString().slice(-8);
+  const { error } = await sb.from("service_requests").insert({
+    code, customer_id: customerId, request_type: selectedType, description: desc, status: "new"
+  });
+
+  btn.disabled = false;
+  if(error){
+    msg.innerHTML = '<div class="err">خطا: '+error.message+'</div>';
+    return;
+  }
+  msg.innerHTML = '<div class="ok">درخواست شما با موفقیت ثبت شد.</div>';
+  document.getElementById("reqDesc").value = "";
+  document.querySelectorAll("#typeGrid button").forEach(b=>b.classList.remove("sel"));
+  selectedType = null;
+  loadRequests();
+};
+
+// لیست درخواست‌ها
+async function loadRequests(){
+  const el = document.getElementById("requestsList");
+  const { data, error } = await sb.from("service_requests")
+    .select("id,code,request_type,description,status,requested_at")
+    .eq("customer_id", customerId)
+    .order("requested_at", { ascending:false });
+
+  if(error){ el.innerHTML = '<div class="card err">خطا: '+error.message+'</div>'; return; }
+  if(!data || data.length===0){ el.innerHTML = '<div class="empty">هنوز درخواستی ثبت نکرده‌اید.</div>'; return; }
+
+  el.innerHTML = data.map(r => `
+    <div class="card">
+      <h3>${TYPE_LABELS[r.request_type] || r.request_type} ${badge(r.status)}</h3>
+      <div class="meta">کد: ${r.code} — ${fmtDate(r.requested_at)}</div>
+      <div>${(r.description||"").replace(/</g,"&lt;")}</div>
+    </div>
+  `).join("");
+}
+
+// پیش فاکتورها
+async function loadQuotes(){
+  const el = document.getElementById("quotesList");
+  const { data, error } = await sb.from("customer_quotations")
+    .select("id,code,status,subtotal,discount,tax,total,valid_until,created_at")
+    .eq("customer_id", customerId)
+    .order("created_at", { ascending:false });
+
+  if(error){ el.innerHTML = '<div class="card err">خطا: '+error.message+'</div>'; return; }
+  if(!data || data.length===0){ el.innerHTML = '<div class="empty">پیش‌فاکتوری برای شما ثبت نشده.</div>'; return; }
+
+  el.innerHTML = data.map(q => `
+    <div class="card" id="quote-${q.id}">
+      <h3>پیش‌فاکتور ${q.code} ${badge(q.status)}</h3>
+      <div class="meta">${q.valid_until ? "اعتبار تا: "+fmtDate(q.valid_until) : ""}</div>
+      <div class="row"><span>جمع جزء</span><span>${toman(q.subtotal)}</span></div>
+      <div class="row"><span>تخفیف</span><span>${toman(q.discount)}</span></div>
+      <div class="row"><span>مالیات</span><span>${toman(q.tax)}</span></div>
+      <div class="row"><b>مبلغ نهایی</b><b>${toman(q.total)}</b></div>
+      ${q.status === "sent" ? `<button class="approve" onclick="approveQuote('${q.id}')">تایید پیش‌فاکتور</button>` : ""}
+      <div id="qmsg-${q.id}"></div>
+    </div>
+  `).join("");
+}
+
+async function approveQuote(id){
+  const msg = document.getElementById("qmsg-"+id);
+  const { error: updErr } = await sb.from("customer_quotations")
+    .update({ status: "approved" }).eq("id", id);
+  if(updErr){
+    msg.innerHTML = '<div class="err">خطا: '+updErr.message+'</div>';
+    return;
+  }
+  loadQuotes();
+}
+window.approveQuote = approveQuote;
+
+// کارها (Jobs)
+async function loadJobs(){
+  const el = document.getElementById("jobsList");
+  const { data, error } = await sb.from("jobs")
+    .select("id,code,status,customer_report,started_at,completed_at,delivered_at,created_at")
+    .eq("customer_id", customerId)
+    .order("created_at", { ascending:false });
+
+  if(error){ el.innerHTML = '<div class="card err">خطا: '+error.message+'</div>'; return; }
+  if(!data || data.length===0){ el.innerHTML = '<div class="empty">کاری برای شما ثبت نشده.</div>'; return; }
+
+  el.innerHTML = data.map(j => `
+    <div class="card">
+      <h3>Job ${j.code} ${badge(j.status)}</h3>
+      <div class="meta">تاریخ ثبت: ${fmtDate(j.created_at)}</div>
+      ${j.customer_report ? '<div>'+j.customer_report.replace(/</g,"&lt;")+'</div>' : ""}
+      ${j.delivered_at ? '<div class="meta">تحویل: '+fmtDate(j.delivered_at)+'</div>' : ""}
+    </div>
+  `).join("");
+}
+
+// فاکتورها و پرداخت‌ها
+async function loadInvoices(){
+  const el = document.getElementById("invoicesList");
+  const { data: invoices, error } = await sb.from("invoices")
+    .select("id,code,total,payment_status,issued_at")
+    .eq("customer_id", customerId)
+    .order("issued_at", { ascending:false });
+
+  if(error){ el.innerHTML = '<div class="card err">خطا: '+error.message+'</div>'; return; }
+  if(!invoices || invoices.length===0){ el.innerHTML = '<div class="empty">فاکتوری برای شما صادر نشده.</div>'; return; }
+
+  const { data: payments } = await sb.from("payments")
+    .select("invoice_id,amount,paid_at")
+    .eq("customer_id", customerId);
+
+  el.innerHTML = invoices.map(inv => {
+    const pays = (payments||[]).filter(p => p.invoice_id === inv.id);
+    const paysHtml = pays.length
+      ? pays.map(p => `<div class="row"><span>پرداخت ${fmtDate(p.paid_at)}</span><span>${toman(p.amount)}</span></div>`).join("")
+      : '<div class="meta">پرداختی ثبت نشده</div>';
+    return `
+      <div class="card">
+        <h3>فاکتور ${inv.code} ${badge(inv.payment_status)}</h3>
+        <div class="meta">تاریخ صدور: ${fmtDate(inv.issued_at)}</div>
+        <div class="row"><b>مبلغ کل</b><b>${toman(inv.total)}</b></div>
+        ${paysHtml}
+      </div>
+    `;
+  }).join("");
+}
+
+// خروج
+document.getElementById("btnLogout").onclick = async () => {
+  await sb.auth.signOut();
+  window.location.href = "customer-auth.html";
+};
+
+init();
+</script>
+</body></html>
