@@ -1,0 +1,254 @@
+<!doctype html><html lang="fa" dir="rtl"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>پنل مدیریت — WorkshopPro</title>
+<style>
+body{font-family:Tahoma,Arial,sans-serif;background:#f4f6f8;margin:0;color:#17202a}
+.center{display:flex;min-height:100vh;align-items:center;justify-content:center;padding:16px}
+.card{background:#fff;border-radius:14px;padding:24px;max-width:380px;width:100%;box-shadow:0 2px 10px #0001}
+h1{font-size:20px;margin:0 0 4px}p.sub{color:#667085;font-size:13px;margin:0 0 18px}
+label{display:block;margin:14px 0 6px;font-weight:bold;font-size:14px}
+input,textarea,select{width:100%;box-sizing:border-box;padding:11px;border:1px solid #ccd2d9;border-radius:9px;font-size:15px;font-family:inherit}
+input[type=email],input[type=password]{direction:ltr;text-align:left}
+button.primary{width:100%;border:0;border-radius:9px;padding:13px;font-size:15px;cursor:pointer;background:#1769aa;color:#fff;margin-top:16px}
+button.primary:disabled{opacity:.5}
+.err{color:#b42318;font-size:13px;margin-top:8px}
+.ok{color:#087443;font-size:13px;margin-top:8px}
+.hidden{display:none}
+
+.top{background:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 4px #0001;position:sticky;top:0;z-index:5}
+.top h1{font-size:17px;margin:0}
+.top button{border:0;background:#f4f6f8;color:#b42318;padding:8px 14px;border-radius:8px;font-size:13px;cursor:pointer}
+.tabs{display:flex;overflow-x:auto;background:#fff;border-bottom:1px solid #e4e7eb;position:sticky;top:53px;z-index:4}
+.tabs button{flex:0 0 auto;padding:12px 14px;border:0;background:none;font-size:13px;color:#667085;white-space:nowrap;border-bottom:2px solid transparent;cursor:pointer}
+.tabs button.active{color:#1769aa;border-color:#1769aa;font-weight:bold}
+.wrap{padding:14px;max-width:640px;margin:0 auto}
+.page{display:none}
+.page.active{display:block}
+.listcard{background:#fff;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 1px 4px #0001}
+.listcard h3{margin:0 0 8px;font-size:15px}
+.listcard .meta{font-size:12px;color:#667085;margin-bottom:6px}
+.badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;margin-inline-start:6px}
+.badge.new{background:#eef2ff;color:#3538cd}
+.badge.approved,.badge.delivered,.badge.closed{background:#ecfdf3;color:#087443}
+.badge.received,.badge.diagnosis{background:#fff4e5;color:#b54708}
+.badge.customer_rejected,.badge.cancelled{background:#fef3f2;color:#b42318}
+.empty{color:#98a2b3;font-size:13px;text-align:center;padding:30px 0}
+button.approve{background:#087443;color:#fff;border:0;border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer;margin-top:8px;margin-inline-end:6px}
+button.reject{background:#fff;color:#b42318;border:1px solid #b42318;border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer;margin-top:8px}
+</style></head><body>
+
+<!-- ورود مدیر -->
+<div id="loginScreen" class="center">
+  <div class="card">
+    <h1>ورود کارکنان</h1>
+    <p class="sub">ورود مخصوص مدیر / تکنسین / انبار</p>
+    <label>ایمیل</label>
+    <input id="loginEmail" type="email" placeholder="you@example.com">
+    <label>رمز عبور</label>
+    <input id="loginPassword" type="password">
+    <button class="primary" id="btnLogin">ورود</button>
+    <div id="loginMsg"></div>
+  </div>
+</div>
+
+<!-- پنل اصلی -->
+<div id="mainScreen" class="hidden">
+  <div class="top">
+    <h1>پنل مدیریت</h1>
+    <button id="btnLogout">خروج</button>
+  </div>
+  <div class="tabs">
+    <button class="tab active" data-page="pRequests">درخواست‌های مشتریان</button>
+    <button class="tab" data-page="pJobs">کارها (Job)</button>
+  </div>
+  <div class="wrap">
+
+    <div id="pRequests" class="page active">
+      <div id="requestsList"><div class="empty">در حال بارگذاری...</div></div>
+    </div>
+
+    <div id="pJobs" class="page">
+      <div id="jobsList"><div class="empty">در حال بارگذاری...</div></div>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+const SUPABASE_URL = "https://tbsxccpkpklmvstyqwfk.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRic3hjY3BrcGtsbXZzdHlxd2ZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyNjI0NDUsImV4cCI6MjEwMzgzODQ0NX0.PfpAn9oGekQRkEP8JJ3T1MnkeHF-rBNBQyNCMpLIeoo";
+
+if(typeof supabase === "undefined"){
+  document.body.innerHTML = '<div class="center"><div class="card err">کتابخانه‌ی اتصال به سرور لود نشد. اینترنت/فیلترشکن را بررسی کنید.</div></div>';
+  throw new Error("supabase-js failed to load");
+}
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const TYPE_LABELS = {
+  sell_equipment: "فروش دستگاه", buy_equipment: "خرید دستگاه",
+  buy_part: "خرید قطعه", buy_service: "درخواست خدمات"
+};
+const STATUS_LABELS = {
+  new:"جدید", received:"دریافت شد", diagnosis:"در حال بررسی", waiting_quote:"در انتظار پیش‌فاکتور",
+  waiting_customer:"در انتظار تایید مشتری", approved:"تایید شده", repairing:"در حال تعمیر",
+  waiting_part:"در انتظار قطعه", sourcing:"در حال تأمین", waiting_purchase:"در انتظار خرید",
+  final_test:"تست نهایی", ready_delivery:"آماده تحویل", delivered:"تحویل شده", closed:"بسته شده",
+  cancelled:"لغو شده", customer_rejected:"رد شده توسط مشتری", customer_hold:"معلق"
+};
+function badge(status){
+  return '<span class="badge '+(status||'')+'">'+(STATUS_LABELS[status]||status||"-")+'</span>';
+}
+function fmtDate(d){ if(!d) return "-"; try{ return new Date(d).toLocaleDateString('fa-IR'); }catch(e){ return d; } }
+
+let currentUser = null;
+let myRole = null;
+
+async function checkSession(){
+  const { data: { user } } = await sb.auth.getUser();
+  if(!user) return showLogin();
+
+  const { data: profile, error } = await sb
+    .from("user_profiles").select("role,full_name").eq("id", user.id).maybeSingle();
+
+  if(error || !profile || !["admin","technician","warehouse_sales"].includes(profile.role)){
+    document.getElementById("loginMsg").innerHTML = '<div class="err">این حساب دسترسی به پنل مدیریت را ندارد.</div>';
+    await sb.auth.signOut();
+    return showLogin();
+  }
+
+  currentUser = user;
+  myRole = profile.role;
+  showMain();
+}
+
+function showLogin(){
+  document.getElementById("loginScreen").classList.remove("hidden");
+  document.getElementById("mainScreen").classList.add("hidden");
+}
+function showMain(){
+  document.getElementById("loginScreen").classList.add("hidden");
+  document.getElementById("mainScreen").classList.remove("hidden");
+  loadRequests();
+  loadJobs();
+}
+
+document.getElementById("btnLogin").onclick = async () => {
+  const msg = document.getElementById("loginMsg");
+  const email = document.getElementById("loginEmail").value.trim();
+  const password = document.getElementById("loginPassword").value;
+  if(!email || !password){
+    msg.innerHTML = '<div class="err">ایمیل و رمز عبور را کامل وارد کنید.</div>';
+    return;
+  }
+  const btn = document.getElementById("btnLogin");
+  btn.disabled = true;
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  btn.disabled = false;
+  if(error){
+    msg.innerHTML = '<div class="err">'+error.message+'</div>';
+    return;
+  }
+  msg.innerHTML = "";
+  checkSession();
+};
+
+document.getElementById("btnLogout").onclick = async () => {
+  await sb.auth.signOut();
+  showLogin();
+};
+
+document.querySelectorAll(".tab").forEach(btn=>{
+  btn.onclick = () => {
+    document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
+    document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById(btn.dataset.page).classList.add("active");
+  };
+});
+
+// لیست درخواست‌های مشتریان
+async function loadRequests(){
+  const el = document.getElementById("requestsList");
+  const { data, error } = await sb.from("service_requests")
+    .select("id,code,request_type,description,status,requested_at,customer_id,customers(name,mobile)")
+    .order("requested_at", { ascending:false });
+
+  if(error){ el.innerHTML = '<div class="listcard err">خطا: '+error.message+'</div>'; return; }
+  if(!data || data.length===0){ el.innerHTML = '<div class="empty">درخواستی ثبت نشده.</div>'; return; }
+
+  el.innerHTML = data.map(r => `
+    <div class="listcard" id="req-${r.id}">
+      <h3>${TYPE_LABELS[r.request_type]||r.request_type} ${badge(r.status)}</h3>
+      <div class="meta">مشتری: ${r.customers ? r.customers.name : "-"} — کد: ${r.code} — ${fmtDate(r.requested_at)}</div>
+      <div>${(r.description||"").replace(/</g,"&lt;")}</div>
+      ${r.status === "new" ? `
+        <button class="approve" onclick="approveRequest('${r.id}','${r.customer_id}')">تایید و شروع پذیرش (ساخت Job)</button>
+        <button class="reject" onclick="rejectRequest('${r.id}')">رد درخواست</button>
+      ` : ""}
+      <div id="reqmsg-${r.id}"></div>
+    </div>
+  `).join("");
+}
+
+async function approveRequest(reqId, customerId){
+  const msg = document.getElementById("reqmsg-"+reqId);
+  const jobCode = "JOB-" + Date.now().toString().slice(-8);
+
+  const { error: jobErr } = await sb.from("jobs").insert({
+    code: jobCode,
+    service_request_id: reqId,
+    customer_id: customerId,
+    status: "received"
+  });
+  if(jobErr){
+    msg.innerHTML = '<div class="err">خطا در ساخت Job: '+jobErr.message+'</div>';
+    return;
+  }
+
+  const { error: updErr } = await sb.from("service_requests")
+    .update({ status: "approved" }).eq("id", reqId);
+  if(updErr){
+    msg.innerHTML = '<div class="err">Job ساخته شد ولی خطا در آپدیت درخواست: '+updErr.message+'</div>';
+    return;
+  }
+
+  loadRequests();
+  loadJobs();
+}
+window.approveRequest = approveRequest;
+
+async function rejectRequest(reqId){
+  const msg = document.getElementById("reqmsg-"+reqId);
+  const { error } = await sb.from("service_requests")
+    .update({ status: "cancelled" }).eq("id", reqId);
+  if(error){
+    msg.innerHTML = '<div class="err">خطا: '+error.message+'</div>';
+    return;
+  }
+  loadRequests();
+}
+window.rejectRequest = rejectRequest;
+
+// لیست Jobها
+async function loadJobs(){
+  const el = document.getElementById("jobsList");
+  const { data, error } = await sb.from("jobs")
+    .select("id,code,status,created_at,customers(name)")
+    .order("created_at", { ascending:false });
+
+  if(error){ el.innerHTML = '<div class="listcard err">خطا: '+error.message+'</div>'; return; }
+  if(!data || data.length===0){ el.innerHTML = '<div class="empty">هنوز Job ای ساخته نشده.</div>'; return; }
+
+  el.innerHTML = data.map(j => `
+    <div class="listcard">
+      <h3>Job ${j.code} ${badge(j.status)}</h3>
+      <div class="meta">مشتری: ${j.customers ? j.customers.name : "-"} — تاریخ: ${fmtDate(j.created_at)}</div>
+    </div>
+  `).join("");
+}
+
+checkSession();
+</script>
+</body></html>
