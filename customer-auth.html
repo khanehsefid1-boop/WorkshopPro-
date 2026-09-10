@@ -69,6 +69,8 @@ if(typeof supabase === "undefined"){
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+try {
+
 const tabLogin = document.getElementById("tabLogin");
 const tabSignup = document.getElementById("tabSignup");
 const panelLogin = document.getElementById("panelLogin");
@@ -128,39 +130,3 @@ document.getElementById("btnSignup").onclick = async () => {
   const user = signUpData.user;
   if(!user){
     btn.disabled = false;
-    msg.innerHTML = '<div class="ok">لینک تایید به ایمیل شما ارسال شد. بعد از تایید ایمیل وارد شوید.</div>';
-    return;
-  }
-
-  const custCode = "CUS-" + Date.now().toString().slice(-8);
-  const { data: customer, error: custErr } = await sb
-    .from("customers")
-    .insert({ code: custCode, name: companyName, mobile: mobile || null, source: "self_signup" })
-    .select("id")
-    .single();
-
-  if(custErr){
-    btn.disabled = false;
-    msg.innerHTML = '<div class="err">خطا در ساخت مشتری: '+custErr.message+'</div>';
-    return;
-  }
-
-  const { error: profErr } = await sb
-    .from("user_profiles")
-    .upsert({
-      id: user.id,
-      full_name: contactName || companyName,
-      role: "customer",
-      customer_id: customer.id,
-    });
-
-  btn.disabled = false;
-  if(profErr){
-    msg.innerHTML = '<div class="err">خطا در ساخت پروفایل: '+profErr.message+'</div>';
-    return;
-  }
-
-  window.location.href = "customer-dashboard.html";
-};
-</script>
-</body></html>
