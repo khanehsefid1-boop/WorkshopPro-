@@ -122,6 +122,13 @@ async function checkSession(){
   myRole = profile.role;
   const roleLabels = { admin: "پنل مدیریت", technician: "پنل تکنسین", warehouse_sales: "پنل انبار و فروش" };
   document.querySelector(".top h1").textContent = roleLabels[myRole] || "پنل کارکنان";
+
+  if(myRole === "technician"){
+    const reqTab = document.querySelector('.tab[data-page="pRequests"]');
+    reqTab.classList.add("hidden");
+    document.querySelector('.tab[data-page="pJobs"]').click();
+  }
+
   showMain();
 }
 
