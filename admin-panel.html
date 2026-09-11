@@ -60,6 +60,7 @@ button.reject{background:#fff;color:#b42318;border:1px solid #b42318;border-radi
   <div class="tabs">
     <button class="tab active" data-page="pRequests">درخواست‌های مشتریان</button>
     <button class="tab" data-page="pJobs">کارها (Job)</button>
+    <button class="tab" data-page="pSourcing" id="tabSourcing">تأمین</button>
   </div>
   <div class="wrap">
 
@@ -69,6 +70,31 @@ button.reject{background:#fff;color:#b42318;border:1px solid #b42318;border-radi
 
     <div id="pJobs" class="page">
       <div id="jobsList"><div class="empty">در حال بارگذاری...</div></div>
+    </div>
+
+    <div id="pSourcing" class="page">
+      <div class="listcard">
+        <h3 style="margin:0 0 8px;font-size:14px">ثبت قیمت روز بازار برای یک قطعه</h3>
+        <input id="mpPartSearch" placeholder="نام قطعه را تایپ کنید...">
+        <div id="mpPartResults"></div>
+        <div id="mpSelectedBox" class="hidden" style="margin-top:8px">
+          <div class="meta">قطعه: <span id="mpSelName"></span> — قیمت فروش داخلی: <span id="mpSelPrice"></span></div>
+        <div style="margin:8px 0">
+          <a id="mpTorobLink" href="#" target="_blank" class="secondary" style="display:inline-block;text-decoration:none;border:1px solid #ccd2d9;border-radius:8px;padding:8px 12px;font-size:13px;margin-inline-end:6px">جستجو در ترب 🔗</a>
+          <a id="mpGoogleLink" href="#" target="_blank" class="secondary" style="display:inline-block;text-decoration:none;border:1px solid #ccd2d9;border-radius:8px;padding:8px 12px;font-size:13px">جستجو در گوگل 🔗</a>
+        </div>
+          <input id="mpPrice" type="number" placeholder="قیمت روز بازار (ریال)" style="margin-top:6px">
+          <input id="mpSource" placeholder="منبع (مثلاً دیجی‌کالا، لاله‌زار...)" style="margin-top:6px">
+          <button class="approve" id="btnSaveMarketPrice" style="margin-top:8px">ثبت قیمت بازار</button>
+        </div>
+        <div id="mpMsg"></div>
+      </div>
+
+      <h3 style="font-size:14px;margin:16px 0 8px">درخواست‌های تأمین در انتظار استعلام</h3>
+      <div id="pendingSourcingList"><div class="empty">در حال بارگذاری...</div></div>
+
+      <h3 style="font-size:14px;margin:16px 0 8px">سفارش‌های در حال تأمین</h3>
+      <div id="orderedSourcingList"></div>
     </div>
 
   </div>
@@ -126,6 +152,7 @@ async function checkSession(){
   if(myRole === "technician"){
     const reqTab = document.querySelector('.tab[data-page="pRequests"]');
     reqTab.classList.add("hidden");
+    document.getElementById("tabSourcing").classList.add("hidden");
     document.querySelector('.tab[data-page="pJobs"]').click();
   }
 
@@ -141,6 +168,8 @@ function showMain(){
   document.getElementById("mainScreen").classList.remove("hidden");
   loadRequests();
   loadJobs();
+  loadPendingSourcing();
+  loadOrderedSourcing();
 }
 
 document.getElementById("btnLogin").onclick = async () => {
@@ -257,6 +286,220 @@ async function loadJobs(){
     </div>
   `).join("");
 }
+
+// ================= تأمین =================
+
+function totalCost(q){
+  return (Number(q.purchase_price)||0) + (Number(q.shipping_cost)||0) + (Number(q.intermediary_cost)||0)
+    + (Number(q.packaging_cost)||0) + (Number(q.transfer_cost)||0) + (Number(q.customs_cost)||0)
+    + (Number(q.currency_risk_cost)||0);
+}
+function riskPenalty(level){
+  return level === "high" ? 0.15 : level === "medium" ? 0.05 : 0;
+}
+function quoteScore(q){
+  const cost = totalCost(q);
+  const days = Number(q.estimated_delivery_days) || 999;
+  return cost * (1 + days*0.01) * (1 + riskPenalty(q.risk_level));
+}
+
+async function loadPendingSourcing(){
+  const el = document.getElementById("pendingSourcingList");
+  const { data, error } = await sb.from("sourcing_requests")
+    .select("id,code,item_name,quantity,status,priority,part_id,job_id,created_at")
+    .in("status", ["new","quoting","offers_received"])
+    .order("created_at", { ascending:false });
+
+  if(error){ el.innerHTML = '<div class="listcard err">خطا: '+error.message+'</div>'; return; }
+  if(!data || data.length===0){ el.innerHTML = '<div class="empty">درخواست تأمینی در انتظار نیست.</div>'; return; }
+
+  el.innerHTML = "";
+  for(const s of data){
+    const box = document.createElement("div");
+    box.className = "listcard";
+    box.id = "src-"+s.id;
+    box.innerHTML = `
+      <h3>${s.item_name} (${s.quantity} عدد) ${badge(s.status)}</h3>
+      <div class="meta">کد: ${s.code} — ${fmtDate(s.created_at)} — اولویت: ${s.priority}</div>
+      <div id="quotes-${s.id}"></div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px dashed #eee">
+        <div class="meta" style="margin-bottom:6px">ثبت پیشنهاد جدید تأمین‌کننده</div>
+        <input id="qSupplier-${s.id}" placeholder="نام تأمین‌کننده">
+        <input id="qPrice-${s.id}" type="number" placeholder="قیمت خرید (ریال)" style="margin-top:6px">
+        <input id="qShip-${s.id}" type="number" placeholder="هزینه حمل (ریال)" style="margin-top:6px">
+        <input id="qDays-${s.id}" type="number" placeholder="مدت تحویل (روز)" style="margin-top:6px">
+        <select id="qRisk-${s.id}" style="margin-top:6px">
+          <option value="low">ریسک کم</option>
+          <option value="medium">ریسک متوسط</option>
+          <option value="high">ریسک بالا</option>
+        </select>
+        <button class="approve" onclick="addQuote('${s.id}')">افزودن پیشنهاد</button>
+        <div id="qmsg-${s.id}"></div>
+      </div>
+    `;
+    el.appendChild(box);
+    loadQuotesFor(s.id);
+  }
+}
+
+async function loadQuotesFor(sourcingId){
+  const el = document.getElementById("quotes-"+sourcingId);
+  const { data, error } = await sb.from("supplier_quotes")
+    .select("id,purchase_price,shipping_cost,intermediary_cost,packaging_cost,transfer_cost,customs_cost,currency_risk_cost,estimated_delivery_days,risk_level,suppliers(name)")
+    .eq("sourcing_request_id", sourcingId);
+
+  if(error || !data || data.length===0){ el.innerHTML = '<div class="meta">هنوز پیشنهادی ثبت نشده.</div>'; return; }
+
+  let best = null;
+  data.forEach(q => { q._total = totalCost(q); q._score = quoteScore(q); if(!best || q._score < best._score) best = q; });
+
+  el.innerHTML = data.map(q => `
+    <div class="row" style="display:block;padding:8px 0">
+      <div><b>${q.suppliers ? q.suppliers.name : "-"}</b> ${q.id===best.id ? '<span class="badge approved">پیشنهاد سیستم ✓</span>' : ""}</div>
+      <div class="meta">قیمت تمام‌شده: ${q._total.toLocaleString('fa-IR')} ریال — تحویل: ${q.estimated_delivery_days||"-"} روز — ریسک: ${q.risk_level||"-"}</div>
+      <button class="approve" style="font-size:12px;padding:6px 10px" onclick="chooseQuote('${sourcingId}','${q.id}','${q._total}')">ثبت خرید با این گزینه</button>
+    </div>
+  `).join("");
+}
+
+async function addQuote(sourcingId){
+  const msg = document.getElementById("qmsg-"+sourcingId);
+  const supplierName = document.getElementById("qSupplier-"+sourcingId).value.trim();
+  const price = Number(document.getElementById("qPrice-"+sourcingId).value) || 0;
+  const ship = Number(document.getElementById("qShip-"+sourcingId).value) || 0;
+  const days = Number(document.getElementById("qDays-"+sourcingId).value) || null;
+  const risk = document.getElementById("qRisk-"+sourcingId).value;
+
+  if(!supplierName || !price){
+    msg.innerHTML = '<div class="err">نام تأمین‌کننده و قیمت را وارد کنید.</div>';
+    return;
+  }
+
+  let { data: supplier } = await sb.from("suppliers").select("id").ilike("name", supplierName).maybeSingle();
+  if(!supplier){
+    const supCode = "SUP-" + Date.now().toString().slice(-8);
+    const { data: newSup, error: supErr } = await sb.from("suppliers")
+      .insert({ code: supCode, name: supplierName }).select("id").single();
+    if(supErr){ msg.innerHTML = '<div class="err">خطا در ثبت تأمین‌کننده: '+supErr.message+'</div>'; return; }
+    supplier = newSup;
+  }
+
+  const { error } = await sb.from("supplier_quotes").insert({
+    sourcing_request_id: sourcingId, supplier_id: supplier.id,
+    purchase_price: price, shipping_cost: ship,
+    estimated_delivery_days: days, risk_level: risk
+  });
+  if(error){ msg.innerHTML = '<div class="err">خطا: '+error.message+'</div>'; return; }
+
+  await sb.from("sourcing_requests").update({ status: "offers_received" }).eq("id", sourcingId).eq("status","new");
+  msg.innerHTML = '<div class="ok">پیشنهاد ثبت شد.</div>';
+  loadQuotesFor(sourcingId);
+}
+window.addQuote = addQuote;
+
+async function chooseQuote(sourcingId, quoteId, total){
+  const purCode = "PUR-" + Date.now().toString().slice(-8);
+  const { data: sr } = await sb.from("sourcing_requests").select("job_id,customer_id").eq("id", sourcingId).maybeSingle();
+  const { data: q } = await sb.from("supplier_quotes").select("supplier_id").eq("id", quoteId).maybeSingle();
+
+  const { error } = await sb.from("purchases").insert({
+    code: purCode, supplier_id: q.supplier_id, sourcing_request_id: sourcingId,
+    job_id: sr ? sr.job_id : null, status: "ordered", purchase_total: total, ordered_at: new Date().toISOString()
+  });
+  if(error){ alert("خطا: "+error.message); return; }
+
+  await sb.from("sourcing_requests").update({ status: "ordered" }).eq("id", sourcingId);
+  loadPendingSourcing();
+  loadOrderedSourcing();
+}
+window.chooseQuote = chooseQuote;
+
+async function loadOrderedSourcing(){
+  const el = document.getElementById("orderedSourcingList");
+  const { data, error } = await sb.from("sourcing_requests")
+    .select("id,code,item_name,quantity,job_id,customer_id,part_id,status")
+    .in("status", ["ordered","shipping"]);
+
+  if(error){ el.innerHTML = '<div class="listcard err">خطا: '+error.message+'</div>'; return; }
+  if(!data || data.length===0){ el.innerHTML = '<div class="empty">سفارش در حال تأمینی نیست.</div>'; return; }
+
+  el.innerHTML = data.map(s => `
+    <div class="listcard">
+      <h3>${s.item_name} (${s.quantity}) ${badge(s.status)}</h3>
+      <button class="approve" onclick="markReceived('${s.id}')">دریافت شد — اتصال به کار</button>
+      <div id="recvmsg-${s.id}"></div>
+    </div>
+  `).join("");
+}
+
+async function markReceived(sourcingId){
+  const msg = document.getElementById("recvmsg-"+sourcingId);
+  const { data: s, error: sErr } = await sb.from("sourcing_requests")
+    .select("job_id,customer_id,part_id,quantity").eq("id", sourcingId).maybeSingle();
+  if(sErr || !s){ msg.innerHTML = '<div class="err">خطا در خواندن درخواست</div>'; return; }
+
+  if(s.part_id){
+    const { error: smErr } = await sb.from("stock_movements").insert({
+      part_id: s.part_id, quantity: s.quantity, reason: "repair",
+      job_id: s.job_id, customer_id: s.customer_id, created_by: currentUser.id
+    });
+    if(smErr){ msg.innerHTML = '<div class="err">خطا: '+smErr.message+'</div>'; return; }
+  }
+
+  await sb.from("sourcing_requests").update({ status: "delivered" }).eq("id", sourcingId);
+  await sb.from("purchases").update({ status: "received", received_at: new Date().toISOString() }).eq("sourcing_request_id", sourcingId);
+  if(s.job_id){
+    await sb.from("jobs").update({ status: "repairing" }).eq("id", s.job_id);
+  }
+  loadOrderedSourcing();
+}
+window.markReceived = markReceived;
+
+// قیمت روز بازار
+let mpTimer = null;
+let mpSelected = null;
+document.getElementById("mpPartSearch").oninput = (e) => {
+  clearTimeout(mpTimer);
+  const raw = e.target.value.trim();
+  if(raw.length < 2){ document.getElementById("mpPartResults").innerHTML = ""; return; }
+  mpTimer = setTimeout(async () => {
+    const qFa = raw.replace(/ي/g,"ی").replace(/ك/g,"ک");
+    const qAr = raw.replace(/ی/g,"ي").replace(/ک/g,"ك");
+    const { data } = await sb.from("parts").select("id,name,sale_price")
+      .or(`name.ilike.%${qFa}%,name.ilike.%${qAr}%,name.ilike.%${raw}%`).limit(8);
+    const el = document.getElementById("mpPartResults");
+    if(!data || data.length===0){ el.innerHTML = '<div class="meta">نتیجه‌ای یافت نشد.</div>'; return; }
+    el.innerHTML = data.map(p => `<div class="row" style="cursor:pointer" onclick='selectMarketPart("${p.id}","${p.name.replace(/'/g,"")}",${p.sale_price||0})'><span>${p.name}</span></div>`).join("");
+  }, 350);
+};
+
+function selectMarketPart(id, name, salePrice){
+  mpSelected = id;
+  document.getElementById("mpSelName").textContent = name;
+  document.getElementById("mpSelPrice").textContent = salePrice.toLocaleString('fa-IR') + " ریال";
+  document.getElementById("mpPartResults").innerHTML = "";
+  document.getElementById("mpPartSearch").value = name;
+  document.getElementById("mpSelectedBox").classList.remove("hidden");
+  document.getElementById("mpTorobLink").href = "https://torob.com/search/?query=" + encodeURIComponent(name);
+  document.getElementById("mpGoogleLink").href = "https://www.google.com/search?q=" + encodeURIComponent(name + " قیمت");
+}
+window.selectMarketPart = selectMarketPart;
+
+document.getElementById("btnSaveMarketPrice").onclick = async () => {
+  const msg = document.getElementById("mpMsg");
+  const price = Number(document.getElementById("mpPrice").value);
+  const source = document.getElementById("mpSource").value.trim();
+  if(!mpSelected || !price){ msg.innerHTML = '<div class="err">قطعه و قیمت را وارد کنید.</div>'; return; }
+
+  const { data: part } = await sb.from("parts").select("name").eq("id", mpSelected).maybeSingle();
+  const { error } = await sb.from("market_prices").insert({
+    part_id: mpSelected, item_name: part.name, price, source
+  });
+  if(error){ msg.innerHTML = '<div class="err">خطا: '+error.message+'</div>'; return; }
+  msg.innerHTML = '<div class="ok">قیمت بازار ثبت شد.</div>';
+  document.getElementById("mpPrice").value = "";
+  document.getElementById("mpSource").value = "";
+};
 
 checkSession();
 </script>
