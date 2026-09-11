@@ -371,16 +371,30 @@ document.getElementById("btnSubmitPartReq").onclick = async () => {
     await sb.from("jobs").update({ status: "repairing" }).eq("id", jobId);
     msg.innerHTML = '<div class="ok">قطعه از انبار رزرو شد.</div>';
   } else {
-    const code = "SRC-" + Date.now().toString().slice(-8);
-    const { error } = await sb.from("sourcing_requests").insert({
-      code, customer_id: job.customer_id, job_id: jobId, requested_by: currentUser.id,
-      part_id: selectedPart.id, item_name: selectedPart.name, quantity: needed,
-      priority: "normal", status: "new"
-    });
-    btn.disabled = false;
-    if(error){ msg.innerHTML = '<div class="err">خطا: '+error.message+'</div>'; return; }
+    const { data: existing } = await sb.from("sourcing_requests")
+      .select("id,quantity,status")
+      .eq("job_id", jobId).eq("part_id", selectedPart.id)
+      .not("status", "in", "(delivered,cancelled,unavailable)")
+      .maybeSingle();
+
+    if(existing){
+      const { error } = await sb.from("sourcing_requests")
+        .update({ quantity: existing.quantity + needed }).eq("id", existing.id);
+      btn.disabled = false;
+      if(error){ msg.innerHTML = '<div class="err">خطا: '+error.message+'</div>'; return; }
+      msg.innerHTML = '<div class="ok">درخواست قبلی برای این قطعه وجود داشت؛ تعداد به آن اضافه شد.</div>';
+    } else {
+      const code = "SRC-" + Date.now().toString().slice(-8);
+      const { error } = await sb.from("sourcing_requests").insert({
+        code, customer_id: job.customer_id, job_id: jobId, requested_by: currentUser.id,
+        part_id: selectedPart.id, item_name: selectedPart.name, quantity: needed,
+        priority: "normal", status: "new"
+      });
+      btn.disabled = false;
+      if(error){ msg.innerHTML = '<div class="err">خطا: '+error.message+'</div>'; return; }
+      msg.innerHTML = '<div class="ok">موجودی کافی نبود؛ درخواست تأمین برای مدیر ارسال شد.</div>';
+    }
     await sb.from("jobs").update({ status: "sourcing" }).eq("id", jobId);
-    msg.innerHTML = '<div class="ok">موجودی کافی نبود؛ درخواست تأمین برای مدیر ارسال شد.</div>';
   }
   loadSourcing();
 };
@@ -391,6 +405,18 @@ document.getElementById("btnSubmitServiceReq").onclick = async () => {
   if(!desc){ msg.innerHTML = '<div class="err">شرح خدمات را وارد کنید.</div>'; return; }
   const btn = document.getElementById("btnSubmitServiceReq");
   btn.disabled = true;
+
+  const { data: existing } = await sb.from("sourcing_requests")
+    .select("id")
+    .eq("job_id", jobId).eq("item_name", desc)
+    .not("status", "in", "(delivered,cancelled,unavailable)")
+    .maybeSingle();
+
+  if(existing){
+    btn.disabled = false;
+    msg.innerHTML = '<div class="err">درخواستی با همین شرح از قبل برای این کار ثبت شده و هنوز باز است.</div>';
+    return;
+  }
 
   const code = "SRC-" + Date.now().toString().slice(-8);
   const { error } = await sb.from("sourcing_requests").insert({
