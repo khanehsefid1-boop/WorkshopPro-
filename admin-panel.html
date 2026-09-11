@@ -210,25 +210,55 @@ document.querySelectorAll(".tab").forEach(btn=>{
 async function loadRequests(){
   const el = document.getElementById("requestsList");
   const { data, error } = await sb.from("service_requests")
-    .select("id,code,request_type,description,status,requested_at,customer_id,customers(name,mobile)")
+    .select("id,code,request_type,description,status,requested_at,customer_id,service_mode,customer_address,customers(name,mobile)")
     .order("requested_at", { ascending:false });
 
   if(error){ el.innerHTML = '<div class="listcard err">خطا: '+error.message+'</div>'; return; }
   if(!data || data.length===0){ el.innerHTML = '<div class="empty">درخواستی ثبت نشده.</div>'; return; }
 
+  const MODE_LABELS = { customer_ships: "ارسال توسط خودم", workshop_pickup: "حمل توسط کارگاه", onsite: "خدمات در محل" };
+  const needsTransport = (m) => m === "workshop_pickup" || m === "onsite";
+
   el.innerHTML = data.map(r => `
     <div class="listcard" id="req-${r.id}">
       <h3>${TYPE_LABELS[r.request_type]||r.request_type} ${badge(r.status)}</h3>
       <div class="meta">مشتری: ${r.customers ? r.customers.name : "-"} — کد: ${r.code} — ${fmtDate(r.requested_at)}</div>
+      ${r.service_mode ? '<div class="meta">نحوه انجام: <b>'+(MODE_LABELS[r.service_mode]||r.service_mode)+'</b></div>' : ""}
+      ${r.customer_address ? '<div class="meta">آدرس: '+r.customer_address.replace(/</g,"&lt;")+'</div>' : ""}
       <div>${(r.description||"").replace(/</g,"&lt;")}</div>
       ${r.status === "new" ? `
         <button class="approve" onclick="approveRequest('${r.id}','${r.customer_id}')">تایید و شروع پذیرش (ساخت Job)</button>
         <button class="reject" onclick="rejectRequest('${r.id}')">رد درخواست</button>
       ` : ""}
+      ${needsTransport(r.service_mode) ? `
+        <div style="margin-top:10px;padding-top:10px;border-top:1px dashed #eee">
+          <div class="meta" style="margin-bottom:6px">ثبت هزینه‌ی ایاب‌وذهاب/کارشناسی (بر اساس اسنپ) و ارسال پیش‌فاکتور</div>
+          <a href="https://app.snapp.taxi/" target="_blank" style="font-size:12px;color:#1769aa">باز کردن اسنپ برای بررسی قیمت مسیر 🔗</a>
+          <input id="transportFee-${r.id}" type="number" placeholder="مبلغ ایاب‌وذهاب و کارشناسی (ریال)" style="margin-top:6px">
+          <button class="approve" onclick="sendTransportQuote('${r.id}','${r.customer_id}')">ثبت و ارسال پیش‌فاکتور</button>
+          <div id="transmsg-${r.id}"></div>
+        </div>
+      ` : ""}
       <div id="reqmsg-${r.id}"></div>
     </div>
   `).join("");
 }
+
+async function sendTransportQuote(reqId, customerId){
+  const msg = document.getElementById("transmsg-"+reqId);
+  const fee = Number(document.getElementById("transportFee-"+reqId).value);
+  if(!fee){ msg.innerHTML = '<div class="err">مبلغ را وارد کنید.</div>'; return; }
+
+  const qCode = "QT-" + Date.now().toString().slice(-8);
+  const { error: qErr } = await sb.from("customer_quotations").insert({
+    code: qCode, customer_id: customerId, service_request_id: reqId,
+    status: "sent", subtotal: fee, total: fee
+  });
+  if(qErr){ msg.innerHTML = '<div class="err">خطا: '+qErr.message+'</div>'; return; }
+
+  msg.innerHTML = '<div class="ok">پیش‌فاکتور ایاب‌وذهاب برای مشتری ارسال شد.</div>';
+}
+window.sendTransportQuote = sendTransportQuote;
 
 async function approveRequest(reqId, customerId){
   const msg = document.getElementById("reqmsg-"+reqId);

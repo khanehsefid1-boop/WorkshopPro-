@@ -63,6 +63,20 @@ button.approve{background:#087443;color:#fff;border:0;border-radius:8px;padding:
       </div>
       <label>شرح درخواست</label>
       <textarea id="reqDesc" placeholder="توضیح کامل درخواست، مشخصات دستگاه یا قطعه مورد نیاز..."></textarea>
+
+      <div id="serviceModeBox" class="hidden">
+        <label>نحوه‌ی انجام خدمات</label>
+        <div class="type-grid" id="modeGrid">
+          <button data-v="customer_ships">خودم دستگاه رو می‌فرستم</button>
+          <button data-v="workshop_pickup">کارگاه حمل کنه</button>
+          <button data-v="onsite">خدمات در محل</button>
+        </div>
+        <div id="addressBox" class="hidden">
+          <label>آدرس دقیق (برای حمل یا مراجعه‌ی تکنسین)</label>
+          <textarea id="reqAddress" placeholder="آدرس کامل + شماره تماس در محل"></textarea>
+        </div>
+      </div>
+
       <button class="primary" id="btnSubmitReq">ثبت درخواست</button>
       <div id="reqMsg"></div>
     </div>
@@ -169,11 +183,28 @@ document.querySelectorAll(".tab").forEach(btn=>{
 });
 
 // انتخاب نوع درخواست
+let selectedMode = null;
 document.querySelectorAll("#typeGrid button").forEach(btn=>{
   btn.onclick = () => {
     document.querySelectorAll("#typeGrid button").forEach(b=>b.classList.remove("sel"));
     btn.classList.add("sel");
     selectedType = btn.dataset.v;
+    const isService = selectedType === "buy_service";
+    document.getElementById("serviceModeBox").classList.toggle("hidden", !isService);
+    if(!isService){
+      selectedMode = null;
+      document.getElementById("addressBox").classList.add("hidden");
+      document.querySelectorAll("#modeGrid button").forEach(b=>b.classList.remove("sel"));
+    }
+  };
+});
+
+document.querySelectorAll("#modeGrid button").forEach(btn=>{
+  btn.onclick = () => {
+    document.querySelectorAll("#modeGrid button").forEach(b=>b.classList.remove("sel"));
+    btn.classList.add("sel");
+    selectedMode = btn.dataset.v;
+    document.getElementById("addressBox").classList.toggle("hidden", selectedMode === "customer_ships");
   };
 });
 
@@ -189,13 +220,27 @@ document.getElementById("btnSubmitReq").onclick = async () => {
     msg.innerHTML = '<div class="err">شرح درخواست را وارد کنید.</div>';
     return;
   }
+  if(selectedType === "buy_service" && !selectedMode){
+    msg.innerHTML = '<div class="err">نحوه‌ی انجام خدمات را انتخاب کنید.</div>';
+    return;
+  }
+  const address = document.getElementById("reqAddress").value.trim();
+  if(selectedType === "buy_service" && selectedMode !== "customer_ships" && !address){
+    msg.innerHTML = '<div class="err">آدرس را وارد کنید.</div>';
+    return;
+  }
+
   const btn = document.getElementById("btnSubmitReq");
   btn.disabled = true;
 
   const code = "SR-" + Date.now().toString().slice(-8);
-  const { error } = await sb.from("service_requests").insert({
-    code, customer_id: customerId, request_type: selectedType, description: desc, status: "new"
-  });
+  const payload = { code, customer_id: customerId, request_type: selectedType, description: desc, status: "new" };
+  if(selectedType === "buy_service"){
+    payload.service_mode = selectedMode;
+    if(selectedMode !== "customer_ships") payload.customer_address = address;
+  }
+
+  const { error } = await sb.from("service_requests").insert(payload);
 
   btn.disabled = false;
   if(error){
@@ -204,8 +249,12 @@ document.getElementById("btnSubmitReq").onclick = async () => {
   }
   msg.innerHTML = '<div class="ok">درخواست شما با موفقیت ثبت شد.</div>';
   document.getElementById("reqDesc").value = "";
+  document.getElementById("reqAddress").value = "";
   document.querySelectorAll("#typeGrid button").forEach(b=>b.classList.remove("sel"));
+  document.querySelectorAll("#modeGrid button").forEach(b=>b.classList.remove("sel"));
+  document.getElementById("serviceModeBox").classList.add("hidden");
   selectedType = null;
+  selectedMode = null;
   loadRequests();
 };
 
@@ -213,17 +262,21 @@ document.getElementById("btnSubmitReq").onclick = async () => {
 async function loadRequests(){
   const el = document.getElementById("requestsList");
   const { data, error } = await sb.from("service_requests")
-    .select("id,code,request_type,description,status,requested_at")
+    .select("id,code,request_type,description,status,requested_at,service_mode,customer_address")
     .eq("customer_id", customerId)
     .order("requested_at", { ascending:false });
 
   if(error){ el.innerHTML = '<div class="card err">خطا: '+error.message+'</div>'; return; }
   if(!data || data.length===0){ el.innerHTML = '<div class="empty">هنوز درخواستی ثبت نکرده‌اید.</div>'; return; }
 
+  const MODE_LABELS = { customer_ships: "ارسال توسط خودم", workshop_pickup: "حمل توسط کارگاه", onsite: "خدمات در محل" };
+
   el.innerHTML = data.map(r => `
     <div class="card">
       <h3>${TYPE_LABELS[r.request_type] || r.request_type} ${badge(r.status)}</h3>
       <div class="meta">کد: ${r.code} — ${fmtDate(r.requested_at)}</div>
+      ${r.service_mode ? '<div class="meta">نحوه انجام: '+(MODE_LABELS[r.service_mode]||r.service_mode)+'</div>' : ""}
+      ${r.customer_address ? '<div class="meta">آدرس: '+r.customer_address.replace(/</g,"&lt;")+'</div>' : ""}
       <div>${(r.description||"").replace(/</g,"&lt;")}</div>
     </div>
   `).join("");
