@@ -242,7 +242,7 @@ async function loadJobs(){
   if(!data || data.length===0){ el.innerHTML = '<div class="empty">هنوز Job ای ساخته نشده.</div>'; return; }
 
   el.innerHTML = data.map(j => `
-    <div class="listcard">
+    <div class="listcard" style="cursor:pointer" onclick="location.href='job-detail.html?id=${j.id}'">
       <h3>Job ${j.code} ${badge(j.status)}</h3>
       <div class="meta">مشتری: ${j.customers ? j.customers.name : "-"} — تاریخ: ${fmtDate(j.created_at)}</div>
     </div>
