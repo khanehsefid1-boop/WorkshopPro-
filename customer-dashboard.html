@@ -61,6 +61,13 @@ button.approve{background:#087443;color:#fff;border:0;border-radius:8px;padding:
         <button data-v="buy_part">خرید قطعه</button>
         <button data-v="buy_service">درخواست خدمات</button>
       </div>
+      <div id="equipmentInfoBox" class="hidden">
+        <label>نوع دستگاه</label>
+        <input id="eqCategoryInput" placeholder="مثلاً لیفتراک، ریچ‌استاکر">
+        <label>برند دستگاه</label>
+        <input id="eqBrandInput" placeholder="مثلاً Zowell، Toyota">
+      </div>
+
       <label>شرح درخواست</label>
       <textarea id="reqDesc" placeholder="توضیح کامل درخواست، مشخصات دستگاه یا قطعه مورد نیاز..."></textarea>
 
@@ -74,6 +81,8 @@ button.approve{background:#087443;color:#fff;border:0;border-radius:8px;padding:
         <div id="addressBox" class="hidden">
           <label>آدرس دقیق (برای حمل یا مراجعه‌ی تکنسین)</label>
           <textarea id="reqAddress" placeholder="آدرس کامل + شماره تماس در محل"></textarea>
+          <button type="button" id="btnGetLocation" style="width:100%;border:1px solid #ccd2d9;border-radius:9px;padding:10px;background:#fff;margin-top:8px;font-size:13px">📍 دریافت موقعیت من از GPS</button>
+          <div id="locMsg" class="meta"></div>
         </div>
       </div>
 
@@ -184,11 +193,13 @@ document.querySelectorAll(".tab").forEach(btn=>{
 
 // انتخاب نوع درخواست
 let selectedMode = null;
+const EQUIPMENT_TYPES = ["sell_equipment","buy_part","buy_service"];
 document.querySelectorAll("#typeGrid button").forEach(btn=>{
   btn.onclick = () => {
     document.querySelectorAll("#typeGrid button").forEach(b=>b.classList.remove("sel"));
     btn.classList.add("sel");
     selectedType = btn.dataset.v;
+    document.getElementById("equipmentInfoBox").classList.toggle("hidden", !EQUIPMENT_TYPES.includes(selectedType));
     const isService = selectedType === "buy_service";
     document.getElementById("serviceModeBox").classList.toggle("hidden", !isService);
     if(!isService){
@@ -207,6 +218,26 @@ document.querySelectorAll("#modeGrid button").forEach(btn=>{
     document.getElementById("addressBox").classList.toggle("hidden", selectedMode === "customer_ships");
   };
 });
+
+let capturedLat = null, capturedLng = null;
+document.getElementById("btnGetLocation").onclick = () => {
+  const msg = document.getElementById("locMsg");
+  if(!navigator.geolocation){
+    msg.textContent = "مرورگر شما از موقعیت‌یابی پشتیبانی نمی‌کند.";
+    return;
+  }
+  msg.textContent = "در حال دریافت موقعیت...";
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      capturedLat = pos.coords.latitude;
+      capturedLng = pos.coords.longitude;
+      msg.textContent = "موقعیت با موفقیت دریافت شد ✓";
+    },
+    (err) => {
+      msg.textContent = "خطا در دریافت موقعیت: " + err.message;
+    }
+  );
+};
 
 // ثبت درخواست جدید
 document.getElementById("btnSubmitReq").onclick = async () => {
@@ -229,15 +260,54 @@ document.getElementById("btnSubmitReq").onclick = async () => {
     msg.innerHTML = '<div class="err">آدرس را وارد کنید.</div>';
     return;
   }
+  const eqCategory = document.getElementById("eqCategoryInput").value.trim();
+  const eqBrand = document.getElementById("eqBrandInput").value.trim();
+  if(EQUIPMENT_TYPES.includes(selectedType) && (!eqCategory || !eqBrand)){
+    msg.innerHTML = '<div class="err">نوع و برند دستگاه را وارد کنید.</div>';
+    return;
+  }
 
   const btn = document.getElementById("btnSubmitReq");
   btn.disabled = true;
 
+  let equipmentId = null;
+  if(EQUIPMENT_TYPES.includes(selectedType)){
+    const { data: existingEq } = await sb.from("equipment")
+      .select("id").eq("customer_id", customerId)
+      .ilike("category", eqCategory).ilike("brand", eqBrand).maybeSingle();
+
+    if(existingEq){
+      equipmentId = existingEq.id;
+    } else {
+      const eqCode = "EQ-" + Date.now().toString().slice(-8);
+      const { data: newEq, error: eqErr } = await sb.from("equipment")
+        .insert({ code: eqCode, customer_id: customerId, category: eqCategory, brand: eqBrand })
+        .select("id").single();
+      if(eqErr){
+        btn.disabled = false;
+        msg.innerHTML = '<div class="err">خطا در ثبت دستگاه: '+eqErr.message+'</div>';
+        return;
+      }
+      equipmentId = newEq.id;
+    }
+  }
+
   const code = "SR-" + Date.now().toString().slice(-8);
   const payload = { code, customer_id: customerId, request_type: selectedType, description: desc, status: "new" };
+  if(equipmentId){
+    payload.equipment_id = equipmentId;
+    payload.equipment_category = eqCategory;
+    payload.equipment_brand = eqBrand;
+  }
   if(selectedType === "buy_service"){
     payload.service_mode = selectedMode;
-    if(selectedMode !== "customer_ships") payload.customer_address = address;
+    if(selectedMode !== "customer_ships"){
+      payload.customer_address = address;
+      if(capturedLat && capturedLng){
+        payload.location_lat = capturedLat;
+        payload.location_lng = capturedLng;
+      }
+    }
   }
 
   const { error } = await sb.from("service_requests").insert(payload);
@@ -250,9 +320,14 @@ document.getElementById("btnSubmitReq").onclick = async () => {
   msg.innerHTML = '<div class="ok">درخواست شما با موفقیت ثبت شد.</div>';
   document.getElementById("reqDesc").value = "";
   document.getElementById("reqAddress").value = "";
+  document.getElementById("eqCategoryInput").value = "";
+  document.getElementById("eqBrandInput").value = "";
+  document.getElementById("locMsg").textContent = "";
+  capturedLat = null; capturedLng = null;
   document.querySelectorAll("#typeGrid button").forEach(b=>b.classList.remove("sel"));
   document.querySelectorAll("#modeGrid button").forEach(b=>b.classList.remove("sel"));
   document.getElementById("serviceModeBox").classList.add("hidden");
+  document.getElementById("equipmentInfoBox").classList.add("hidden");
   selectedType = null;
   selectedMode = null;
   loadRequests();
