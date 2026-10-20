@@ -1,0 +1,48 @@
+-- فقط‌خواندنی (SELECT). در Supabase > SQL Editor اجرا کنید.
+-- خروجی یک ستون JSON است؛ کپی کنید و در docs/schema.json ذخیره کنید.
+with cols as (
+  select table_name,
+         jsonb_agg(jsonb_build_object('column', column_name, 'type', data_type,
+                   'nullable', is_nullable, 'default', column_default)
+                   order by ordinal_position) as c
+  from information_schema.columns
+  where table_schema = 'public'
+  group by table_name
+),
+rls as (
+  select tablename, rowsecurity from pg_tables where schemaname = 'public'
+),
+pol as (
+  select tablename,
+         jsonb_agg(jsonb_build_object('name', policyname, 'cmd', cmd, 'roles', roles,
+                   'using', qual, 'check', with_check)) as p
+  from pg_policies
+  where schemaname = 'public'
+  group by tablename
+),
+cons as (
+  select conrelid::regclass::text as tbl,
+         jsonb_agg(conname || ': ' || pg_get_constraintdef(oid)) as d
+  from pg_constraint
+  where connamespace = 'public'::regnamespace
+  group by conrelid
+)
+select jsonb_pretty(jsonb_build_object(
+  'tables', (
+    select jsonb_agg(jsonb_build_object(
+             'table', c.table_name,
+             'columns', c.c,
+             'rls_enabled', r.rowsecurity,
+             'policies', coalesce(p.p, '[]'::jsonb),
+             'constraints', coalesce(k.d, '[]'::jsonb)))
+    from cols c
+    left join rls r  on r.tablename = c.table_name
+    left join pol p  on p.tablename = c.table_name
+    left join cons k on k.tbl = c.table_name
+  ),
+  'functions', (
+    select jsonb_agg(routine_name)
+    from information_schema.routines
+    where routine_schema = 'public'
+  )
+)) as schema_report;
