@@ -357,42 +357,67 @@ async function loadRequests(){
   `).join("");
 }
 
-// پیش فاکتورها
+// پیش فاکتورها (فقط مالی و مدیرعامل شرکت؛ از ویوهای امن می‌خوانیم)
+function escHtml(s){
+  return String(s === null || s === undefined ? "" : s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+
 async function loadQuotes(){
   const el = document.getElementById("quotesList");
-  const { data, error } = await sb.from("customer_quotations")
-    .select("id,code,status,subtotal,discount,tax,total,valid_until,created_at")
-    .eq("customer_id", customerId)
+  const { data, error } = await sb.from("customer_quotations_v")
+    .select("id,code,status,subtotal,discount,tax,shipping_cost,total,valid_until,created_at,customer_note")
     .order("created_at", { ascending:false });
 
-  if(error){ el.innerHTML = '<div class="card err">خطا: '+error.message+'</div>'; return; }
-  if(!data || data.length===0){ el.innerHTML = '<div class="empty">پیش‌فاکتوری برای شما ثبت نشده.</div>'; return; }
+  if(error){ el.innerHTML = '<div class="card err">خطا: '+escHtml(error.message)+'</div>'; return; }
+  if(!data || data.length===0){
+    el.innerHTML = '<div class="empty">پیش‌فاکتوری برای شما نمایش داده نمی‌شود. پیش‌فاکتور فقط برای مالی و مدیرعامل شرکت قابل مشاهده است.</div>';
+    return;
+  }
 
-  el.innerHTML = data.map(q => `
-    <div class="card" id="quote-${q.id}">
-      <h3>پیش‌فاکتور ${q.code} ${badge(q.status)}</h3>
+  const ids = data.map(q => q.id);
+  const { data: items } = await sb.from("customer_quotation_items_v")
+    .select("quotation_id,description,quantity,unit,unit_price,discount,total_price,warranty_days")
+    .in("quotation_id", ids);
+  const byQuote = {};
+  (items || []).forEach(i => { (byQuote[i.quotation_id] = byQuote[i.quotation_id] || []).push(i); });
+
+  el.innerHTML = data.map(q => {
+    const rows = (byQuote[q.id] || []).map(i => `
+      <div class="row"><span>${escHtml(i.description)} × ${escHtml(i.quantity)} ${escHtml(i.unit || "")}</span><span>${toman(i.total_price)}</span></div>
+    `).join("");
+    return `
+    <div class="card" id="quote-${escHtml(q.id)}">
+      <h3>پیش‌فاکتور ${escHtml(q.code)} ${badge(q.status)}</h3>
       <div class="meta">${q.valid_until ? "اعتبار تا: "+fmtDate(q.valid_until) : ""}</div>
+      ${rows}
       <div class="row"><span>جمع جزء</span><span>${toman(q.subtotal)}</span></div>
       <div class="row"><span>تخفیف</span><span>${toman(q.discount)}</span></div>
       <div class="row"><span>مالیات</span><span>${toman(q.tax)}</span></div>
+      <div class="row"><span>هزینه حمل</span><span>${toman(q.shipping_cost)}</span></div>
       <div class="row"><b>مبلغ نهایی</b><b>${toman(q.total)}</b></div>
-      ${q.status === "sent" ? `<button class="approve" onclick="approveQuote('${q.id}')">تایید پیش‌فاکتور</button>` : ""}
-      <div id="qmsg-${q.id}"></div>
-    </div>
-  `).join("");
+      ${q.customer_note ? `<div class="meta">${escHtml(q.customer_note)}</div>` : ""}
+      ${q.status === "sent" ? `
+        <button class="approve" onclick="respondQuote('${escHtml(q.id)}','approved')">تایید پیش‌فاکتور</button>
+        <button class="approve" style="background:#b42318" onclick="respondQuote('${escHtml(q.id)}','rejected')">رد پیش‌فاکتور</button>` : ""}
+      <div id="qmsg-${escHtml(q.id)}"></div>
+    </div>`;
+  }).join("");
 }
 
-async function approveQuote(id){
+async function respondQuote(id, decision){
   const msg = document.getElementById("qmsg-"+id);
-  const { error: updErr } = await sb.from("customer_quotations")
-    .update({ status: "approved" }).eq("id", id);
-  if(updErr){
-    msg.innerHTML = '<div class="err">خطا: '+updErr.message+'</div>';
+  const { error: rpcErr } = await sb.rpc("respond_customer_quotation",
+    { p_quotation_id: id, p_decision: decision });
+  if(rpcErr){
+    msg.innerHTML = '<div class="err">خطا: '+escHtml(rpcErr.message)+'</div>';
     return;
   }
   loadQuotes();
 }
-window.approveQuote = approveQuote;
+window.respondQuote = respondQuote;
+window.approveQuote = (id) => respondQuote(id, "approved");
 
 // کارها (Jobs)
 async function loadJobs(){
